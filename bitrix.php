@@ -56,3 +56,26 @@ function bxModifySaleMails($orderID, &$eventName, &$arFields)
 	$arFields["PAY_SYSTEM_NAME"] =  $pay_system_name . " " . $pay_system_desc;
 
 }
+
+
+function MinifyHtml(&$buffer)
+{
+
+  $buffer = preg_replace(
+    array(
+      '/\>[^\S ]+/s',
+      '/[^\S ]+\</s',
+      '/(\s)+/s',
+      '/<!--(?![^<]*noindex)(.*?)-->/'
+    ),
+    array(
+      '>',
+      '<',
+      '\\1',
+      ''
+    ),
+    $buffer
+  );
+}
+
+AddEventHandler('main', 'OnEndBufferContent', 'MinifyHtml');
