@@ -1,0 +1,208 @@
+<?php
+// Подключение API Битрикс
+require_once($_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_before.php');
+
+use Bitrix\Catalog\PriceTable;
+use Bitrix\Iblock\PropertyTable;
+use Bitrix\Main\Loader;
+use Bitrix\Main\LoaderException;
+use Bitrix\Iblock\ElementTable;
+use Bitrix\Main\Application;
+// Array
+// (
+//     [0] => Название
+//     [1] => Бренд
+//     [2] => Вид покрытия
+//     [3] => Коллекция
+//     [4] => Артикул
+//     [5] => Декор
+//     [6] => Цвет
+//     [7] => Оттенок
+//     [8] => Тип укладки
+//     [9] => Подложка
+//     [10] => Фаска
+//     [11] => Защитный слой мм
+//     [12] => Размер, мм
+//     [13] => метров в упаковке
+//     [14] => Цена
+//     [15] => Валюта
+//     [16] => Элемент
+//     [17] => Описание
+// )
+
+
+
+CModule::IncludeModule('iblock');
+CModule::IncludeModule('sale');
+
+$translitParams = array(
+  "max_len" => "100", // обрезает символьный код до 100 символов
+  "change_case" => "L", // буквы преобразуются к нижнему регистру
+  "replace_space" => "_", // меняем пробелы на нижнее подчеркивание
+  "replace_other" => "_", // меняем левые символы на нижнее подчеркивание
+  "delete_repeat_replace" => "true", // удаляем повторяющиеся нижние подчеркивания
+  "use_google" => "false", // отключаем использование google
+);
+
+?>
+
+<?
+$arOptions = []; // Пустой массив для хранения заголовков столбцов
+$arData = []; // Пустой массив для хранения данных
+$filename = './shopparket200923 - table.csv'; // Путь к CSV файлу
+
+if (($handle = fopen($filename, 'r')) !== FALSE) { // Открываем файл для чтения
+  while (($data = fgetcsv($handle, 1000, ',')) !== FALSE) { // Читаем файл построчно
+
+    // Если массив $arOptions пуст, значит читаем первую строку с заголовками столбцов
+    if (count($arOptions) === 0) {
+      $arOptions = $data; // Сохраняем заголовки столбцов в $arOptions
+    } else {
+      $rowData = []; // Создаем пустой ассоциативный массив для хранения данных одной строки
+
+      foreach ($arOptions as $key => $option) {
+        $rowData[$option] = $data[$key]; // Сохраняем данные строки в соответствующий ключ массива $rowData
+      }
+
+      $arData[] = $rowData; // Добавляем ассоциативный массив $rowData в массив $arData
+    }
+  }
+
+  fclose($handle); // Закрываем файл
+}
+
+foreach ($arData as $key => $data) {
+  // Свойство справочник
+  // ID => CODE
+  $colors = array(
+    "1" => "colorless",
+    "2" => "white",
+    "3" => "beige",
+    "4" => "grey",
+    "5" => "natural",
+    "6" => "golden",
+    "7"  => "brown",
+    "8" => "brown",
+    "9"  => "brown",
+    "10" => "black",
+  );
+
+  $exploded_colors = explode("/", $data['IS_OTTENOK']);
+
+  $arColors = [];
+
+  foreach ($exploded_colors as $index => $value) {
+    $arColors[] = $colors[$value];
+  }
+
+  $data['IS_OTTENOK'] = $arColors;
+
+  // Свойство список
+  // VALUE => ID
+  $selections = [
+    "Премиум" => "28",
+    "Селект" => "29",
+    "Натур" => "30",
+    "Кантри" => "36"
+  ];
+
+  $razmer = [
+    "400-1800х160х15" => "70",
+    "400-1800х160х20" => "71",
+    "400-1800х200х15" => "72",
+    "400-1800х200х20" => "73",
+  ];
+
+  $data['SELECIYA'] = ['VALUE' => $selections[$data['SELECTION']]];
+  $data['IS_RAZMER_SPISOK']['VALUE'] = ['VALUE' => $razmer[$data['IS_RAZMER']]];
+
+  try {
+    // Проверка загрузки модуля "Торговый каталог"
+    if (!Loader::includeModule('catalog')) {
+      throw new LoaderException('Не удалось загрузить модуль "Торговый каталог"');
+    }
+
+    // ID инфоблока, в котором будет создано предложение
+    $IBLOCK_ID = 3;
+
+    // Создание элемента торгового предложения
+    $offer = new CIBlockElement();
+
+    $arrProps = array(
+      "CML2_LINK" => $data['ID'],
+      "BRAND_REF" => $data["BRAND_REF"],
+      "IS_KOLLEKCIA" => $data["IS_KOLLEKCIA"],
+      "ARTIC" => $data["ARTIC"],
+      "POLOSNOST" => $data["POLOSNOST"],
+      "MATERIAL" => $data["MATERIAL"],
+      "SELECIYA" => $data["SELECIYA"],
+      "SELECTION" => $data["SELECTION"],
+      "DEKOR" => $data["DEKOR"],
+      "IS_POKRYTIE" => $data["IS_POKRYTIE"],
+      "COLOR_NEW" => $data["COLOR_NEW"],
+      "IS_OTTENOK" => $data["IS_OTTENOK"],
+      "TIP_UKLADKI" => $data["TIP_UKLADKI"],
+      "FASKA" => $data["FASKA"],
+      "IS_RAZMER" => $data['IS_RAZMER_SPISOK'],
+      "RAZMER" => $data["IS_RAZMER"],
+      "SHPON" => $data["SHPON"],
+      "V_UPAKOVKE" => $data["V_UPAKOVKE"],
+    );
+
+    $fields = array(
+      "MODIFIED_BY" => $USER->GetID(),
+      'NAME' => $data['NAME'],
+      'IBLOCK_ID' => $IBLOCK_ID,
+      'PRICE' => $data['PRICE'],
+      "PREVIEW_TEXT"   => $data['DETAIL_TEXT'],
+      "DETAIL_TEXT"    => $data['DETAIL_TEXT'],
+      'PROPERTY_VALUES' => $arrProps,
+    );
+
+    // Добавление торгового предложения в инфоблок
+    if ($offerId = $offer->Add($fields)) {
+
+      echo $data['ARTIC'];
+      echo '<br/>';
+      echo 'Предложение успешно создано. ID: ' . $offerId;
+
+      // Подключаем модуль catalog
+      if (CModule::IncludeModule('catalog')) {
+        // Добавляем параметры к торг. предложению
+        CCatalogProduct::Add(
+          array(
+            "ID" => $offerId,
+          )
+        );
+      }
+
+      // Розничная цена торгового предложения
+      $price = $data['PRICE'];
+      // Валюта розничной цены
+      $currency = 'RUB';
+      // Получение ID типа цены "Розничная"
+      $priceTypeId = \CCatalogGroup::GetBaseGroup();
+      // Обновление розничной цены торгового предложения
+      CPrice::Add(
+        array(
+          "CURRENCY" => $currency,
+          "PRICE" => $price,
+          "CATALOG_GROUP_ID" => $priceTypeId['ID'],
+          "PRODUCT_ID" => $offerId,
+        )
+      );
+
+      echo '<br/>';
+      echo 'Розничная цена для торгового предложения успешно установлена.';
+    } else {
+      throw new Exception($offer->LAST_ERROR);
+    }
+  } catch (LoaderException $e) {
+    echo 'Ошибка загрузки модуля: ' . $e->getMessage();
+  } catch (Exception $e) {
+    echo 'Ошибка: ' . $e->getMessage();
+  }
+}
+
+
+?>
